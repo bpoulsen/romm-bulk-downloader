@@ -1,6 +1,6 @@
 # romm-bulk-downloader
 
-Bulk-download every ROM from a specific RomM collection using the RomM API.
+Bulk-download every ROM file from a specific RomM collection using the RomM API.
 
 ## What this script does
 
@@ -20,11 +20,35 @@ Bulk-download every ROM from a specific RomM collection using the RomM API.
 
 ## Install dependencies (recommended: virtual environment)
 
-macOS/Homebrew Python can block global installs. Use a local virtual environment:
+Choose the commands for your platform:
+
+### macOS / Linux
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+### Windows (PowerShell)
+
+```powershell
+py -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+### Windows (Command Prompt)
+
+```bat
+py -m venv .venv
+.venv\Scripts\activate.bat
+python -m pip install -r requirements.txt
+```
+
+If you are not on macOS/Homebrew and prefer not to use a virtual environment, you can install dependencies globally:
+
+```bash
 python -m pip install -r requirements.txt
 ```
 
@@ -56,6 +80,10 @@ ROMM_OUTPUT_DIR=./downloads
 
 `python romm_download_collection.py`
 
+On Windows, you can also run:
+
+`py romm_download_collection.py`
+
 The script will create the output directory if needed (you already added `downloads/`) and then save ROMs in platform subfolders, for example:
 
 - `downloads/nes/...`
@@ -65,7 +93,23 @@ Each run also writes a timestamped log file in `logs/`, for example:
 
 - `logs/romm_download_20260428_100301.log`
 
-## Notes
+## Troubleshooting (Windows)
 
-- Keep `.env` private and out of source control (already ignored by `.gitignore`).
-- Commit `.env.example` so others can configure the script safely.
+- **PowerShell blocks activation script**
+  - Error example: `running scripts is disabled on this system`
+  - Fix for current PowerShell session:
+    - `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`
+  - Then activate again:
+    - `.venv\Scripts\Activate.ps1`
+- `**py` command is not found**
+  - Use Python directly instead:
+    - `python -m venv .venv`
+    - `python romm_download_collection.py`
+  - If `python` is also not found, install Python from [python.org](https://www.python.org/downloads/windows/) and enable "Add Python to PATH" during setup.
+- **Dependencies still missing after install**
+  - Ensure the venv is activated before running:
+    - `.venv\Scripts\Activate.ps1` (PowerShell)
+    - `.venv\Scripts\activate.bat` (Command Prompt)
+  - Reinstall dependencies:
+    - `python -m pip install -r requirements.txt`
+
