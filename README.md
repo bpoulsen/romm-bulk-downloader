@@ -2,6 +2,11 @@
 
 Bulk-download every ROM file from a specific RomM collection using the RomM API.
 
+## RomM Links
+
+- RomM project: [https://romm.app/](https://romm.app/)
+- RomM API reference: [https://docs.romm.app/latest/API-and-Development/API-Reference/](https://docs.romm.app/latest/API-and-Development/API-Reference/)
+
 ## What this script does
 
 - Authenticates to your RomM instance with username/password credentials.
@@ -101,7 +106,7 @@ Each run also writes a timestamped log file in `logs/`, for example:
     - `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`
   - Then activate again:
     - `.venv\Scripts\Activate.ps1`
-- `**py` command is not found**
+- **`py` command is not found**
   - Use Python directly instead:
     - `python -m venv .venv`
     - `python romm_download_collection.py`
@@ -112,4 +117,8 @@ Each run also writes a timestamped log file in `logs/`, for example:
     - `.venv\Scripts\activate.bat` (Command Prompt)
   - Reinstall dependencies:
     - `python -m pip install -r requirements.txt`
+
+## Disclaimer
+
+This is an independent community project and is not affiliated with, endorsed by, or maintained by the official RomM project.
 
