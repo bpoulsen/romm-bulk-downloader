@@ -14,10 +14,13 @@ import os
 import sys
 import time
 import logging
+import argparse
 import requests
 from pathlib import Path
 from dotenv import load_dotenv
+from collections import defaultdict
 from datetime import datetime
+from romm_sync_config import resolve_onion_folder_for_romm_slug
 
 load_dotenv()
 
@@ -94,6 +97,29 @@ def get_file_name(rom: dict) -> str | None:
     return None
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Download all ROMs in a RomM collection.")
+    parser.add_argument(
+        "--onionos",
+        action="store_true",
+        help="Save files into OnionOS-mapped folders under downloads/onionos.",
+    )
+    return parser.parse_args()
+
+
+def get_destination_dir(output_dir: Path, platform_slug: str, sync_onionos: bool) -> Path:
+    if not sync_onionos:
+        return output_dir / platform_slug
+
+    onion_folder = resolve_onion_folder_for_romm_slug(platform_slug)
+    if onion_folder:
+        return output_dir / onion_folder
+
+    # Fallback keeps downloads working for unmapped platforms.
+    log(f"  [WARN] No OnionOS mapping for RomM slug '{platform_slug}'. Falling back to '{platform_slug}'.")
+    return output_dir / platform_slug
+
+
 def get_session() -> requests.Session:
     session = requests.Session()
     session.auth = (USERNAME, PASSWORD)
@@ -144,12 +170,18 @@ def fetch_collection_roms(session: requests.Session) -> list[dict]:
     return roms
 
 
-def download_rom(session: requests.Session, rom: dict, output_dir: Path) -> bool:
+def download_rom(
+    session: requests.Session,
+    rom: dict,
+    output_dir: Path,
+    sync_onionos: bool,
+) -> tuple[str, Path | None]:
     """
     Download a single ROM file. Streams the response to avoid loading
     large files into memory all at once.
 
-    Returns True on success, False on failure.
+    Returns (status, dest_path) where status is one of:
+        downloaded, skipped_exists, skipped_incomplete, failed
     """
     rom_id    = rom.get("id")
     file_name = get_file_name(rom)
@@ -157,16 +189,15 @@ def download_rom(session: requests.Session, rom: dict, output_dir: Path) -> bool
 
     if not rom_id or not file_name:
         log(f"  [SKIP] Incomplete ROM data: id={rom_id}, name={rom.get('name', 'Unknown')}")
-        return False
+        return ("skipped_incomplete", None)
 
-    # Mirror the platform folder structure
-    dest_dir = output_dir / platform
+    dest_dir = get_destination_dir(output_dir, platform, sync_onionos)
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_path = dest_dir / file_name
 
     if dest_path.exists():
         log(f"  [SKIP] Already exists: {dest_path}")
-        return True
+        return ("skipped_exists", dest_path)
 
     url = f"{BASE_URL}/api/roms/{rom_id}/content/{requests.utils.quote(file_name)}"
 
@@ -186,28 +217,35 @@ def download_rom(session: requests.Session, rom: dict, output_dir: Path) -> bool
                             print(f"\r  {pct:5.1f}%  {file_name}", end="", flush=True)
 
         log(f"  [OK]   {file_name} ({downloaded / 1024 / 1024:.1f} MB)")
-        return True
+        return ("downloaded", dest_path)
 
     except requests.HTTPError as e:
         log(f"  [FAIL] {file_name} — HTTP {e.response.status_code}")
         if dest_path.exists():
             dest_path.unlink()  # Remove partial file
-        return False
+        return ("failed", None)
 
     except Exception as e:
         log(f"  [FAIL] {file_name} — {e}")
         LOGGER.exception("Unhandled download exception")
         if dest_path.exists():
             dest_path.unlink()
-        return False
+        return ("failed", None)
 
 
 def main():
+    args = parse_args()
     log_file = setup_logging()
     log(f"Log file: {log_file.resolve()}")
 
-    output_dir = Path(OUTPUT_DIR)
+    output_root = Path(OUTPUT_DIR)
+    mode_folder = "onionos" if args.onionos else "romm"
+    output_dir = output_root / mode_folder
     output_dir.mkdir(parents=True, exist_ok=True)
+    if args.onionos:
+        log(f"OnionOS mapping enabled. Saving under: {output_dir.resolve()}")
+    else:
+        log(f"Standard RomM folders enabled. Saving under: {output_dir.resolve()}")
 
     session = get_session()
 
@@ -230,21 +268,50 @@ def main():
         log("No ROMs found. Check that COLLECTION_ID is correct.")
         sys.exit(0)
 
-    success = 0
-    failed  = 0
+    new_by_folder: dict[str, list[str]] = defaultdict(list)
+    new_count = 0
+    skipped_exists = 0
+    skipped_incomplete = 0
+    failed = 0
+
     for i, rom in enumerate(roms, 1):
         name = rom.get("name") or get_file_name(rom) or "Unknown"
         log(f"\n[{i}/{len(roms)}] {name}")
-        result = download_rom(session, rom, output_dir)
-        if result:
-            success += 1
+        status, dest_path = download_rom(session, rom, output_dir, args.onionos)
+        if status == "downloaded" and dest_path:
+            new_count += 1
+            out_base = output_dir.resolve()
+            parent = dest_path.parent.resolve()
+            try:
+                rel = parent.relative_to(out_base)
+            except ValueError:
+                rel = dest_path.parent.relative_to(output_dir)
+            folder_key = str(rel).replace("\\", "/") or "."
+            new_by_folder[folder_key].append(dest_path.name)
+        elif status == "skipped_exists":
+            skipped_exists += 1
+        elif status == "skipped_incomplete":
+            skipped_incomplete += 1
         else:
             failed += 1
         # Small delay to be polite to the server
         time.sleep(0.25)
 
     log(f"\n{'─' * 40}")
-    log(f"Done. {success} downloaded, {failed} failed, saved to: {output_dir.resolve()}")
+    log(
+        f"Done. {new_count} new file(s), {skipped_exists} skipped (already present), "
+        f"{skipped_incomplete} skipped (incomplete data), {failed} failed. "
+        f"Output: {output_dir.resolve()}"
+    )
+
+    if new_by_folder:
+        log("\nNew downloads by folder:")
+        for folder in sorted(new_by_folder.keys()):
+            log(f"  {folder}/")
+            for fname in sorted(new_by_folder[folder]):
+                log(f"    {fname}")
+    else:
+        log("\nNo new files downloaded (everything was already present, skipped, or failed).")
 
 
 if __name__ == "__main__":

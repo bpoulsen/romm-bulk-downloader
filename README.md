@@ -14,6 +14,7 @@ Bulk-download every ROM file from a specific RomM collection using the RomM API.
 - Downloads ROM files with streaming to handle large files efficiently.
 - Skips files that are already present locally.
 - Organizes downloaded files by platform inside the output directory.
+- When the run finishes, prints a **summary** (counts of new files, skipped, and failures) and lists **only newly downloaded** files grouped by subfolder. The same text is appended to the run’s log file in `logs/`.
 
 ## Requirements
 
@@ -85,18 +86,43 @@ ROMM_OUTPUT_DIR=./downloads
 
 `python romm_download_collection.py`
 
+To use OnionOS folder mapping:
+
+`python romm_download_collection.py --onionos`
+
 On Windows, you can also run:
 
 `py romm_download_collection.py`
 
-The script will create the output directory if needed (you already added `downloads/`) and then save ROMs in platform subfolders, for example:
+The script will create the output directory if needed and save ROMs in platform subfolders:
 
-- `downloads/nes/...`
-- `downloads/snes/...`
+- Default mode: `downloads/romm/<romm-platform-slug>/...`
+- OnionOS mode (`--onionos`): `downloads/onionos/<onion-folder>/...`
 
-Each run also writes a timestamped log file in `logs/`, for example:
+Examples:
+
+- `downloads/romm/gb/...`
+- `downloads/onionos/GBA/...`
+
+### OnionOS layout (`--onionos`)
+
+RomM platform slugs are mapped to OnionOS-style folder names (e.g. `gba` → `GBA`) using `romm_sync_config.py`. Edit that file if a slug on your server does not match the table.
+
+### After the run
+
+The script prints a line like:
+
+`Done. X new file(s), Y skipped (already present), Z skipped (incomplete data), W failed. Output: …`
+
+If any files were **newly downloaded** this run (not skipped because they already existed), it then prints **New downloads by folder:** with each subfolder under `romm/` or `onionos/` and the filenames underneath.
+
+### Logs
+
+Each run writes a timestamped log file in `logs/`, for example:
 
 - `logs/romm_download_20260428_100301.log`
+
+The log includes the same completion summary and new-download listing as the console.
 
 ## Troubleshooting (Windows)
 
